@@ -538,6 +538,7 @@ func (cc *ClientConn) GetState() connectivity.State {
 func (cc *ClientConn) Connect() {
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
+	logger.Errorf("ClientConn.Connect: cc.balancerWrapper %#v, cc.conns %#v", cc.balancerWrapper, cc.conns)
 	if cc.balancerWrapper != nil && cc.balancerWrapper.exitIdle() {
 		return
 	}

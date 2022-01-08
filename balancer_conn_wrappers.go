@@ -67,6 +67,7 @@ func newCCBalancerWrapper(cc *ClientConn, b balancer.Builder, bopts balancer.Bui
 	go ccb.watcher()
 	ccb.balancer = b.Build(ccb, bopts)
 	_, ccb.hasExitIdle = ccb.balancer.(balancer.ExitIdler)
+	logger.Errorf("ccBalancerWrapper.newCCBalancerWrapper: got ccb.balancer %#v, ccb.hasExitIdle %t", ccb.balancer, ccb.hasExitIdle)
 	return ccb
 }
 
@@ -136,6 +137,7 @@ func (ccb *ccBalancerWrapper) close() {
 }
 
 func (ccb *ccBalancerWrapper) exitIdle() bool {
+	logger.Errorf("ccBalancerWrapper.exitIdle: ccb.balancer %#v, ccb.hasExitIdle %t", ccb.balancer, ccb.hasExitIdle)
 	if !ccb.hasExitIdle {
 		return false
 	}

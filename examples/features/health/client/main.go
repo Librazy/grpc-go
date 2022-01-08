@@ -27,10 +27,15 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	pb "google.golang.org/grpc/examples/features/proto/echo"
 	_ "google.golang.org/grpc/health"
 	"google.golang.org/grpc/resolver"
 	"google.golang.org/grpc/resolver/manual"
+)
+
+var (
+	initState = flag.Bool("init-state", false, "Whether to call manual.InitialState")
 )
 
 var serviceConfig = `{
@@ -55,23 +60,36 @@ func main() {
 	flag.Parse()
 
 	r := manual.NewBuilderWithScheme("whatever")
-	r.InitialState(resolver.State{
-		Addresses: []resolver.Address{
-			{Addr: "localhost:50051"},
-			{Addr: "localhost:50052"},
-		},
-	})
+	if *initState {
+		r.InitialState(resolver.State{
+			Addresses: []resolver.Address{
+				{Addr: "localhost:50051"},
+				{Addr: "localhost:50052"},
+			},
+		})
+	} else {
+		go func() {
+			time.Sleep(time.Second * 1)
+			r.UpdateState(resolver.State{
+				Addresses: []resolver.Address{
+					{Addr: "localhost:50051"},
+					{Addr: "localhost:50052"},
+				},
+			})
+		}()
+	}
 
 	address := fmt.Sprintf("%s:///unused", r.Scheme())
 
 	options := []grpc.DialOption{
-		grpc.WithInsecure(),
-		grpc.WithBlock(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithReturnConnectionError(),
 		grpc.WithResolvers(r),
 		grpc.WithDefaultServiceConfig(serviceConfig),
 	}
-
-	conn, err := grpc.Dial(address, options...)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	conn, err := grpc.DialContext(ctx, address, options...)
+	cancel()
 	if err != nil {
 		log.Fatalf("did not connect %v", err)
 	}

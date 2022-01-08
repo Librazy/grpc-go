@@ -45,6 +45,7 @@ func (bb *baseBuilder) Build(cc balancer.ClientConn, opt balancer.BuildOptions) 
 		scStates: make(map[balancer.SubConn]connectivity.State),
 		csEvltr:  &balancer.ConnectivityStateEvaluator{},
 		config:   bb.config,
+		idle:     true,
 	}
 	// Initialize picker to a picker that always returns
 	// ErrNoSubConnAvailable, because when state of a SubConn changes, we
@@ -71,6 +72,7 @@ type baseBalancer struct {
 
 	resolverErr error // the last error reported by the resolver; cleared on successful resolution
 	connErr     error // the last connection error; cleared upon leaving TransientFailure
+	idle        bool
 }
 
 func (b *baseBalancer) ResolverError(err error) {
@@ -112,7 +114,9 @@ func (b *baseBalancer) UpdateClientConnState(s balancer.ClientConnState) error {
 			b.subConns.Set(a, sc)
 			b.scStates[sc] = connectivity.Idle
 			b.csEvltr.RecordTransition(connectivity.Shutdown, connectivity.Idle)
-			sc.Connect()
+			if !b.idle {
+				sc.Connect()
+			}
 		}
 	}
 	for _, a := range b.subConns.Keys() {
@@ -198,7 +202,9 @@ func (b *baseBalancer) UpdateSubConnState(sc balancer.SubConn, state balancer.Su
 	b.scStates[sc] = s
 	switch s {
 	case connectivity.Idle:
-		sc.Connect()
+		if !b.idle {
+			sc.Connect()
+		}
 	case connectivity.Shutdown:
 		// When an address was removed by resolver, b called RemoveSubConn but
 		// kept the sc's state in scStates. Remove state for this sc here.
@@ -226,9 +232,15 @@ func (b *baseBalancer) UpdateSubConnState(sc balancer.SubConn, state balancer.Su
 func (b *baseBalancer) Close() {
 }
 
-// ExitIdle is a nop because the base balancer attempts to stay connected to
-// all SubConns at all times.
+// ExitIdle set idle to false and connects all subConns.
 func (b *baseBalancer) ExitIdle() {
+	logger.Info("base.baseBalancer: ExitIdle")
+	b.idle = false
+	for _, addr := range b.subConns.Keys() {
+		sci, _ := b.subConns.Get(addr)
+		sc := sci.(balancer.SubConn)
+		sc.Connect()
+	}
 }
 
 // NewErrPicker returns a Picker that always returns err on Pick().
